@@ -12,7 +12,7 @@ const MODRINTH_URL         = `https://modrinth.com/plugin/${PROJECT_SLUG}`;
 const API_BASE             = 'https://api.modrinth.com/v2';
 const INTERVAL_MS          = 12000;
 const DL_TIMEOUT           = 20000;
-const PROXY_REFRESH_EVERY  = 25; // cycles between proxy pool refreshes
+const PROXY_REFRESH_EVERY  = 40; // cycles between proxy pool refreshes
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -106,11 +106,57 @@ async function proxyFetch(url, proxyHostPort, ms, opts = {}) {
 //  test them, keep the working ones
 // ─────────────────────────────────────────
 const PROXY_SOURCES = [
+  // ProxyScrape
   'https://api.proxyscrape.com/v3/free-proxy-list/get?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=all&anonymity=elite,anonymous',
+  'https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=5000&country=all&ssl=all&anonymity=all',
+  'https://api.proxyscrape.com/v2/?request=getproxies&protocol=http&timeout=10000&country=all',
+  // GitHub lists
   'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt',
+  'https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt',
   'https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt',
   'https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt',
+  'https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/https.txt',
   'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt',
+  'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies_anonymous/http.txt',
+  'https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt',
+  'https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTP_RAW.txt',
+  'https://raw.githubusercontent.com/mmpx12/proxy-list/master/http.txt',
+  'https://raw.githubusercontent.com/mmpx12/proxy-list/master/https.txt',
+  'https://raw.githubusercontent.com/HyperBeats/proxy-list/main/http.txt',
+  'https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt',
+  'https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-https.txt',
+  'https://raw.githubusercontent.com/sunny9577/proxy-scraper/master/proxies.txt',
+  'https://raw.githubusercontent.com/UptimerBot/proxy-list/main/proxies/http.txt',
+  'https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/http.txt',
+  'https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies_anonymous/http.txt',
+  'https://raw.githubusercontent.com/zevtyardt/proxy-list/main/http.txt',
+  'https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/http/http.txt',
+  'https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/https/https.txt',
+  'https://raw.githubusercontent.com/saisuiu/Lionkings-Http-Proxys-Proxies/main/free.txt',
+  'https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/http_proxies.txt',
+  'https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/https_proxies.txt',
+  'https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt',
+  'https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt',
+  'https://raw.githubusercontent.com/yuceltoluyag/GoodProxy/main/raw.txt',
+  'https://raw.githubusercontent.com/zloi-user/hideip.me/main/http.txt',
+  'https://raw.githubusercontent.com/zloi-user/hideip.me/main/https.txt',
+  'https://raw.githubusercontent.com/elliottophellia/yakumo/master/results/http/global/http_checked.txt',
+  'https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt',
+  'https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/https.txt',
+  'https://raw.githubusercontent.com/themiralay/Proxy-List-World/master/data.txt',
+  'https://raw.githubusercontent.com/ObcbO/getproxy/master/file/http.txt',
+  'https://raw.githubusercontent.com/TuanMinPay/live-proxy/master/http.txt',
+  'https://raw.githubusercontent.com/proxy4parsing/proxy-list/main/http.txt',
+  'https://raw.githubusercontent.com/im-razvan/proxy_list/main/http.txt',
+  'https://raw.githubusercontent.com/casals-ar/proxy-list/main/http.txt',
+  'https://raw.githubusercontent.com/casals-ar/proxy-list/main/https.txt',
+  'https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt',
+  // Public API endpoints
+  'https://www.proxy-list.download/api/v1/get?type=http',
+  'https://www.proxy-list.download/api/v1/get?type=https',
+  'https://www.proxyscan.io/download?type=http',
+  'https://api.openproxylist.xyz/http.txt',
+  'https://multiproxy.org/txt_all/proxy.txt',
 ];
 
 async function fetchProxyCandidates() {
@@ -150,13 +196,13 @@ async function refreshProxyPool() {
 
   try {
     const candidates = await fetchProxyCandidates();
-    log(`Got ${candidates.length} candidates — testing up to 80`, 'info');
+    log(`Got ${candidates.length} candidates — testing up to 200`, 'info');
 
-    const pool     = candidates.sort(() => Math.random() - 0.5).slice(0, 80);
+    const pool     = candidates.sort(() => Math.random() - 0.5).slice(0, 200);
     const working  = [];
     const BATCH    = 15;
 
-    for (let i = 0; i < pool.length && working.length < 35; i += BATCH) {
+    for (let i = 0; i < pool.length && working.length < 80; i += BATCH) {
       const batch   = pool.slice(i, i + BATCH);
       const results = await Promise.all(batch.map(hp => testProxy(hp).then(ok => ok ? hp : null)));
       working.push(...results.filter(Boolean));
