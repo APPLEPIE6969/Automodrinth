@@ -1,4 +1,4 @@
-cost express = require('express');
+const express = require('express');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app  = express();
