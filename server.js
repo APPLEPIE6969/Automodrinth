@@ -8,8 +8,9 @@ const PORT = process.env.PORT || 3000;
 //  PROJECTS — add more here anytime
 // ─────────────────────────────────────────
 const PROJECTS = [
-  { slug: 'aurelium',     type: 'plugin', label: 'Aurelium'      },
-  { slug: 'dune-striders', type: 'mod',   label: 'Dune Striders'  },
+  { slug: 'aurelium',      type: 'plugin', label: 'Aurelium'      },
+  { slug: 'dune-striders', type: 'mod',    label: 'Dune Striders'  },
+  { slug: 'growhealth',    type: 'plugin', label: 'GrowHealth'     },
 ];
 
 // ─────────────────────────────────────────
@@ -19,6 +20,7 @@ const API_BASE            = 'https://api.modrinth.com/v2';
 const INTERVAL_MS         = 13000;   // base interval per project loop
 const DL_TIMEOUT          = 20000;
 const PROXY_REFRESH_EVERY = 40;      // cycles between proxy pool refreshes
+const VERSION_CHECK_EVERY  = 5;       // cycles between checking for new versions
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -67,6 +69,8 @@ const projects = PROJECTS.map(p => ({
   downloads: 0,
   dlFailed:  0,
   errors:    0,
+  knownIds:  new Set(),
+  newVersionQueue: [],
   lastView:  null,
   lastDl:    null,
   lastError: null,
@@ -251,19 +255,46 @@ function nextProxy() {
 // ─────────────────────────────────────────
 //  LOAD VERSIONS FOR A PROJECT
 // ─────────────────────────────────────────
-async function loadVersions(proj) {
-  if (proj.versions.length > 0) return;
-  log(`Loading ${proj.label} from API...`, 'info', proj.label);
+async function loadVersions(proj, forceCheck = false) {
+  const isFirstLoad = proj.versions.length === 0;
+  if (!isFirstLoad && !forceCheck) return;
+
   const h = { 'User-Agent': 'AutoBot/1.0', 'Accept': 'application/json' };
-  const [pr, vr] = await Promise.all([
-    directFetch(`${API_BASE}/project/${proj.slug}`, 10000, { headers: h }),
-    directFetch(`${API_BASE}/project/${proj.slug}/version`, 10000, { headers: h }),
-  ]);
-  if (!pr.ok) throw new Error(`Project API ${pr.status}`);
-  proj.data = await pr.json();
-  const all = await vr.json();
-  proj.versions = all.filter(v => v.files?.length);
-  log(`"${proj.data.title}" — ${proj.versions.length} versions`, 'ok', proj.label);
+  try {
+    const [pr, vr] = await Promise.all([
+      directFetch(`${API_BASE}/project/${proj.slug}`, 10000, { headers: h }),
+      directFetch(`${API_BASE}/project/${proj.slug}/version`, 10000, { headers: h }),
+    ]);
+    if (!pr.ok) throw new Error(`Project API ${pr.status}`);
+    proj.data = await pr.json();
+    const all = await vr.json();
+    const fresh = all.filter(v => v.files?.length);
+
+    if (isFirstLoad) {
+      proj.versions    = fresh;
+      proj.knownIds    = new Set(fresh.map(v => v.id));
+      log(`"${proj.data.title}" — ${fresh.length} versions loaded`, 'ok', proj.label);
+    } else {
+      // Detect new versions not seen before
+      const newVersions = fresh.filter(v => !proj.knownIds.has(v.id));
+      if (newVersions.length > 0) {
+        for (const v of newVersions) {
+          proj.knownIds.add(v.id);
+          const loader  = (v.loaders        || ['unknown'])[0];
+          const gameVer = (v.game_versions  || ['?'])[0];
+          log(`🆕 NEW VERSION DETECTED: v${v.version_number} [${loader} ${gameVer}]`, 'ok', proj.label);
+          proj.newVersionQueue.push(v); // queue it for immediate download
+        }
+        proj.versions = fresh; // update full list
+        log(`Version list updated: ${fresh.length} total, ${newVersions.length} new`, 'ok', proj.label);
+      } else {
+        proj.versions = fresh; // refresh list silently
+        log(`Version check: no updates (${fresh.length} versions)`, 'info', proj.label);
+      }
+    }
+  } catch(e) {
+    log(`Version check failed: ${e.message}`, 'warn', proj.label);
+  }
 }
 
 // ─────────────────────────────────────────
@@ -294,7 +325,10 @@ async function registerView(proj) {
 async function downloadFile(proj) {
   if (!proj.versions.length) { log('No versions', 'warn', proj.label); return false; }
 
-  const ver     = randEl(proj.versions);
+  // If a new version was just detected, download it first
+  const ver = proj.newVersionQueue.length > 0
+    ? proj.newVersionQueue.shift()
+    : randEl(proj.versions);
   const file    = ver.files.find(f => f.primary) || ver.files[0];
   const fileUrl = file.url;
   const fname   = file.filename;
@@ -370,6 +404,7 @@ async function runProjectCycle(proj) {
 
   try {
     if (!proj.versions.length) await loadVersions(proj);
+    else if (proj.cycles % VERSION_CHECK_EVERY === 0) await loadVersions(proj, true);
     await registerView(proj);
     const readTime = 5000 + Math.random() * 9000;
     log(`Reading for ${(readTime/1000).toFixed(1)}s...`, 'info', proj.label);
