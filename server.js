@@ -11,6 +11,7 @@ const PROJECTS = [
   { slug: 'aurelium',      type: 'plugin', label: 'Aurelium'      },
   { slug: 'dune-striders', type: 'mod',    label: 'Dune Striders'  },
   { slug: 'growhealth',    type: 'plugin', label: 'GrowHealth'     },
+  { slug: 'coinop',        type: 'plugin', label: 'CoinOp'     },
 ];
 
 // ─────────────────────────────────────────
